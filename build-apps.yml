@@ -1,0 +1,96 @@
+# Builds the Windows installer and the Android app (APK) in the cloud, for free, every time you
+# upload a new copy of the project. Results appear under "Releases" in this repository.
+# The repository needs only this file and capsule-link.zip (plus an optional branding folder with
+# app-name.txt and app-icon.png). See docs/getting-the-apps.md.
+name: Build the apps
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack the project
+        run: |
+          if [ -f capsule-link.zip ]; then unzip -q capsule-link.zip -d unpacked; SRC=unpacked/capsule-link; else SRC=.; fi
+          if [ -d branding ]; then cp -r branding "$SRC/branding"; fi
+          echo "SRC=$SRC" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - uses: android-actions/setup-android@v3
+      - name: Build the APK
+        run: |
+          cd "$SRC"
+          node tools/apply-branding.mjs
+          cd mobile
+          npm install --no-audit --no-fund
+          npm run android:init
+          if [ -f ../branding/app-icon.png ]; then
+            for d in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do
+              IFS=: read dens size fg <<< "$d"
+              res=android/app/src/main/res/mipmap-$dens
+              convert ../branding/app-icon.png -resize ${size}x${size} "$res/ic_launcher.png"
+              convert ../branding/app-icon.png -resize ${size}x${size} "$res/ic_launcher_round.png"
+              inner=$((fg * 66 / 108))
+              convert ../branding/app-icon.png -resize ${inner}x${inner} -background none -gravity center -extent ${fg}x${fg} "$res/ic_launcher_foreground.png"
+            done
+          fi
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/out/phone-app.apk"
+      - uses: actions/upload-artifact@v4
+        with: { name: android, path: out/phone-app.apk }
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack the project
+        shell: bash
+        run: |
+          if [ -f capsule-link.zip ]; then unzip -q capsule-link.zip -d unpacked; SRC=unpacked/capsule-link; else SRC=.; fi
+          if [ -d branding ]; then cp -r branding "$SRC/branding"; fi
+          echo "SRC=$SRC" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Build the installer
+        shell: bash
+        run: |
+          cd "$SRC"
+          node tools/apply-branding.mjs
+          cd desktop
+          npm install --no-audit --no-fund
+          npm run dist
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          cp release/*.exe "$GITHUB_WORKSPACE/out/pc-app-setup.exe"
+      - uses: actions/upload-artifact@v4
+        with: { name: windows, path: out/pc-app-setup.exe }
+
+  release:
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: out, merge-multiple: true }
+      - name: Publish under Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-build
+          name: Latest build
+          body: |
+            pc-app-setup.exe: run it on your Windows PC (Windows may warn about an unknown publisher: More info → Run anyway).
+            phone-app.apk: open it on your Android phone (allow installing apps from your browser or files app when asked).
+          files: |
+            out/pc-app-setup.exe
+            out/phone-app.apk
+          make_latest: true
