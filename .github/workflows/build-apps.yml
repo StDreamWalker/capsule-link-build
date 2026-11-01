@@ -1,3 +1,4 @@
+
 # Builds the Windows installer and the Android app (APK) in the cloud, for free, every time you
 # upload a new copy of the project. Results appear under "Releases" in this repository.
 # The repository needs only this file and capsule-link.zip (plus an optional branding folder with
@@ -26,6 +27,10 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 21 }
       - uses: android-actions/setup-android@v4
+
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses
+
       - name: Install image tools
         run: sudo apt-get update && sudo apt-get install -y imagemagick
       - name: Build the APK
