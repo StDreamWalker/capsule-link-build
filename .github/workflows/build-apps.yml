@@ -56,10 +56,8 @@ jobs:
             done || true
           fi
           cd android
-          # the app's own version on the APK (what Android shows under App info), from version.json
-          VER=$(node -p "require('../../version.json').version")
-          sed -i -E "s/versionCode [0-9]+/versionCode ${CAPSULE_BUILD:-1}/; s/versionName \"[^\"]*\"/versionName \"$VER\"/" app/build.gradle
-          echo "Building the Android app, version $VER (build ${CAPSULE_BUILD:-1})"
+          # (the version name and a version code that always grows are set by native/patch-android.mjs)
+          grep -E "versionCode|versionName" app/build.gradle || true
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
           mkdir -p "$GITHUB_WORKSPACE/out"
