@@ -44,14 +44,16 @@ jobs:
           npm install --no-audit --no-fund
           npm run android:init
           if [ -f ../branding/app-icon.png ]; then
-            for d in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do
+            # (ImageMagick isn't on GitHub's newer Ubuntu machines any more: fetch it when needed)
+            command -v convert >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick; } || echo "::warning::Couldn't install ImageMagick, so the app keeps its default icon."
+            command -v convert >/dev/null && for d in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do
               IFS=: read dens size fg <<< "$d"
               res=android/app/src/main/res/mipmap-$dens
               convert ../branding/app-icon.png -resize ${size}x${size} "$res/ic_launcher.png"
               convert ../branding/app-icon.png -resize ${size}x${size} "$res/ic_launcher_round.png"
               inner=$((fg * 66 / 108))
               convert ../branding/app-icon.png -resize ${inner}x${inner} -background none -gravity center -extent ${fg}x${fg} "$res/ic_launcher_foreground.png"
-            done
+            done || true
           fi
           cd android
           # the app's own version on the APK (what Android shows under App info), from version.json
